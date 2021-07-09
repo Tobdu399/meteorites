@@ -356,23 +356,29 @@ def game():
         # Effects ---------------------------------------------------
 
         if fade_in or fade_out:
-            fade_effect = Surface(display.get_size(), SRCALPHA)  # -> pygame.Surface()
+            fade_effect = Surface(display.get_size(), SRCALPHA)  # -> pygame.Surface
+            print(fade_alpha)
             fade_effect.fill((0, 0, 0, fade_alpha))
             display.blit(fade_effect, (0, 0))
 
         if fade_in:
-            if fade_alpha > 0.0:
-                fade_alpha -= 2.5 * elapsed_time
+            if fade_alpha > 0:
+                fade_alpha -= 2 * elapsed_time
             else:
                 fade_in = False
         elif fade_out:
-            if fade_alpha < 255.0:
-                fade_alpha += 2.5 * elapsed_time
+            if fade_alpha < 255:
+                fade_alpha += 2 * elapsed_time
             else:
                 fade_out = False
                 if game_over:
                     hide_game = True
                     fade_in, fade_alpha = True, 255
+
+        if fade_alpha < 0:
+            fade_alpha = 0
+        elif fade_alpha > 255:
+            fade_alpha = 255
 
         # Get elapsed time since the last frame
         elapsed_time = clock.tick(0) / 10
