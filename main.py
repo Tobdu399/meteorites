@@ -1,58 +1,70 @@
-import pygame
-import math
-import random
+# Import ONLY the items needed for slightly better performance
+from pygame.display   import set_mode, set_caption, set_icon, flip
+from pygame.font      import init, Font
+from pygame           import Surface, SRCALPHA, KEYDOWN, K_UP, K_DOWN, K_LEFT, K_RIGHT, K_RETURN, K_SPACE, quit, QUIT
+from pygame.draw      import polygon, circle
+from pygame.transform import rotate, scale
+from pygame.time      import Clock
+from pygame.image     import load
+from pygame.key       import get_pressed
+from pygame.event     import get
+
+from math import sqrt, sin, cos, radians
+from random import randint, uniform
 
 
 class Meteorite:
-    def __init__(self, surface: pygame.Surface, size=140):
+    def __init__(self, surface: Surface, size=140):
         self.surface            = surface
         self.points             = []
-        self.points_location    = []
-        self.meteorite_rotation = random.uniform(-1, 1)
-        self.rotation_speed     = random.uniform(-1, 1)
-        self.direction          = random.randint(0, 360)
+        self.points_location    = []    # 'self.points' contains the points' positions on the surface, but...
+        self.meteorite_rotation = uniform(-1, 1)          # ...not their actual location on the screen
+        self.rotation_speed     = uniform(-1, 1)
+        self.direction          = randint(0, 360)
         self.meteorite_size     = self.avg_size = size
 
-        side = random.randint(1, 4)  # 1 up, 2 right, 3 down, 4 left
+        # Randomize the meteorite's spawning point
+        side = randint(1, 4)  # 1 up, 2 right, 3 down, 4 left
         if side == 1:
-            self.x, self.y = random.randint(0, self.surface.get_width()), -self.meteorite_size
+            self.x, self.y = randint(0, self.surface.get_width()), -self.meteorite_size
         elif side == 2:
-            self.x, self.y = self.surface.get_width()+self.meteorite_size, random.randint(0, self.surface.get_height())
+            self.x, self.y = self.surface.get_width()+self.meteorite_size, randint(0, self.surface.get_height())
         elif side == 3:
-            self.x, self.y = random.randint(0, self.surface.get_width()), self.surface.get_height()+self.meteorite_size
+            self.x, self.y = randint(0, self.surface.get_width()), self.surface.get_height()+self.meteorite_size
         elif side == 4:
-            self.x, self.y = -self.meteorite_size, random.randint(0, self.surface.get_height())
+            self.x, self.y = -self.meteorite_size, randint(0, self.surface.get_height())
 
+        # Generate the meteorite
         verts = 20
         vert_sizes = []
         for i in range(verts):
-            radius = random.randint(int(self.meteorite_size/3), int(self.meteorite_size/2))
+            radius = randint(int(self.meteorite_size/3), int(self.meteorite_size/2))
             vert_sizes.append(radius)
 
             rotation = (360 / verts) * i
             self.points.append((
-                int(self.meteorite_size / 2) + math.sin(math.radians(rotation)) * (radius * -1),
-                int(self.meteorite_size / 2) + math.cos(math.radians(rotation)) * (radius * -1),
+                int(self.meteorite_size / 2) + sin(radians(rotation)) * (radius * -1),
+                int(self.meteorite_size / 2) + cos(radians(rotation)) * (radius * -1),
             ))
 
-        # Get the average size of the meteorite for a more accurate hit box
+        # Get the average size of the meteorites verts for a more accurate hit box
         self.avg_size = sum(vert_sizes) / len(vert_sizes)
 
-    def show(self, surface: pygame.Surface, elapsed_time: float):
+    def show(self, surface: Surface, elapsed_time: float):
         self.move(surface, elapsed_time)
 
         # Show the meteorite
-        meteorite_container = pygame.Surface((self.meteorite_size, self.meteorite_size), pygame.SRCALPHA)
-        pygame.draw.polygon(meteorite_container, (255, 255, 0), self.points, 3)
-        meteorite_container = pygame.transform.rotate(meteorite_container, self.meteorite_rotation)
+        meteorite_container = Surface((self.meteorite_size, self.meteorite_size), SRCALPHA)  # -> pygame.Surface()
+        polygon(meteorite_container, (255, 255, 0), self.points, 3)                          # -> pygame.draw.polygon()
+        meteorite_container = rotate(meteorite_container, self.meteorite_rotation)
         meteorite_container_rect = meteorite_container.get_rect(center=(self.x, self.y))
 
         self.surface.blit(meteorite_container, meteorite_container_rect)
 
-    def move(self, surface: pygame.Surface, elapsed_time: float):
+    def move(self, surface: Surface, elapsed_time: float):
         # Move and rotate the meteorite
-        self.x += math.sin(math.radians(self.direction)) * (0.5 * elapsed_time)
-        self.y += math.cos(math.radians(self.direction)) * (0.5 * elapsed_time)
+        self.x += sin(radians(self.direction)) * (0.5 * elapsed_time)
+        self.y += cos(radians(self.direction)) * (0.5 * elapsed_time)
         self.meteorite_rotation += self.rotation_speed * elapsed_time
         self.meteorite_rotation = self.meteorite_rotation % 359
 
@@ -67,7 +79,8 @@ class Meteorite:
         elif self.y < -self.meteorite_size:
             self.y = display_dimensions[1] + (self.meteorite_size / 2)
 
-        # 'self.points' contains the points' positions on the surface, but not their actual location on the screen
+        # 'self.points' contains the points' positions on the surface, but not their actual location on the screen'
+        # Updating the list containing the actual coordinates here
         self.points_location = []
         for point in self.points:
             self.points_location.append((point[0] + self.x, point[1] + self.y))
@@ -76,18 +89,16 @@ class Meteorite:
     def collide(self, obj_pos: tuple):
         obj_x, obj_y = obj_pos
 
-        dist = math.sqrt((self.x - obj_x) ** 2 + (self.y - obj_y) ** 2)
+        dist = sqrt((self.x - obj_x) ** 2 + (self.y - obj_y) ** 2)
         if dist < self.avg_size:
             return True
 
 
 def game():
-    pygame.init()
+    init()
 
-    pygame.display.set_caption("Meteorites!")
-
-    display             = pygame.display.set_mode((800, 800))
-    clock               = pygame.time.Clock()
+    display             = set_mode((800, 800))     # -> pygame.display.set_mode()
+    clock               = Clock()                  # -> pygame.time.Clock()
     process_interrupted, game_over = False, False
     elapsed_time        = 0
 
@@ -102,21 +113,21 @@ def game():
     # Images --------------------------------------------------------
 
     # Icon and background image
-    pygame.display.set_icon(pygame.image.load("images/meteorite.png").convert())
-    background_image = pygame.transform.scale(
-        pygame.image.load("images/background.jpg").convert(), (800, 800)
+    set_icon(load("lib/images/meteorite.png").convert())         # -> pygame.image.load()
+    background_image = scale(                                    # -> pygame.transform.scale()
+        load("lib/images/background.jpg").convert(), (800, 800)  # -> pygame.image.load()
     )
 
     # Explosion images
     explosion_images, explosion_frame = [
-        pygame.transform.scale(
-            pygame.image.load(f"images/explosion/frame_{frame}.png").convert_alpha(), (200, 200)
+        scale(                                                                           # -> pygame.transform.scale()
+            load(f"lib/images/explosion/frame_{frame}.png").convert_alpha(), (200, 200)  # -> pygame.image.load()
         ) for frame in range(1, 28)
     ], 0
 
     # Heart image
-    heart_image = pygame.transform.scale(
-        pygame.image.load("images/heart.png").convert_alpha(), (40, 40)
+    heart_image = scale(                                        # -> pygame.transform.scale()
+        load("lib/images/heart.png").convert_alpha(), (40, 40)  # -> pygame.image.load()
     )
 
     # Game properties -----------------------------------------------
@@ -132,6 +143,7 @@ def game():
     lives_remaining = 3
 
     while not process_interrupted:
+        set_caption(f"Meteorites!    FPS {int(clock.get_fps())}")   # -> pygame.display.set_caption()
         display.fill((0, 0, 0))
 
         display.blit(background_image, (0, 0))
@@ -155,15 +167,15 @@ def game():
             # Spaceship -------------------------------------------------
 
             if not spaceship_destroyed:
-                spaceship_container = pygame.Surface((30, 35), pygame.SRCALPHA)
+                spaceship_container = Surface((30, 35), SRCALPHA)   # -> pygame.Surface()
                 container_dimensions = spaceship_container.get_size()
-                pygame.draw.polygon(spaceship_container, (255, 255, 255), (
+                polygon(spaceship_container, (255, 255, 255), (     # -> pygame.draw.polygon()
                     (container_dimensions[0] / 2, (container_dimensions[1] / 2) - 15),
                     ((container_dimensions[0] / 2) + 10, (container_dimensions[1] / 2) + 10),
                     ((container_dimensions[0] / 2) - 10, (container_dimensions[1] / 2) + 10)
                 ), 2)
 
-                spaceship_container = pygame.transform.rotate(spaceship_container, spaceship_rotation)
+                spaceship_container = rotate(spaceship_container, spaceship_rotation)
                 spaceship_container_rect = spaceship_container.get_rect(center=spaceship_location)
                 display.blit(spaceship_container, spaceship_container_rect)
 
@@ -200,13 +212,13 @@ def game():
                         direction    = bullets[bullet][1]
                         bullet_speed = 8
 
-                        pygame.draw.circle(display, (255, 255, 255), (bullet_x, bullet_y), 3)
+                        circle(display, (255, 255, 255), (bullet_x, bullet_y), 3)   # -> pygame.draw.circle()
 
                         # Move the bullet in given angle
                         bullets[bullet] = (
                             (
-                                (bullet_x + math.sin(math.radians(direction)) * ((bullet_speed * -1) * elapsed_time)),
-                                (bullet_y + math.cos(math.radians(direction)) * ((bullet_speed * -1) * elapsed_time)),
+                                (bullet_x + sin(radians(direction)) * ((bullet_speed * -1) * elapsed_time)),
+                                (bullet_y + cos(radians(direction)) * ((bullet_speed * -1) * elapsed_time)),
                             ),
                             direction
                         )
@@ -243,7 +255,7 @@ def game():
             for heart in range(0, lives_remaining):
                 display.blit(heart_image, (heart_image.get_width()*heart, display.get_height()-heart_image.get_height()))
 
-            font = pygame.font.Font("fonts/fr73pixel.ttf", 22)
+            font = Font("lib/fonts/fr73pixel.ttf", 22)
 
             score_text = font.render(f"score: {score}", True, (255, 255, 255))
             wave_text  = font.render(f"wave: {wave}", True, (255, 255, 255))
@@ -254,14 +266,14 @@ def game():
             # Spaceship Movement-----------------------------------------
 
             if not game_over:
-                keys = pygame.key.get_pressed()
+                keys = get_pressed()    # -> pygame.key.get_pressed()
 
                 if not spaceship_destroyed:
                     # Add acceleration effect to the spaceship movement
-                    if keys[pygame.K_UP]:
+                    if keys[K_UP]:
                         if spaceship_speed < 5:
                             spaceship_speed += 0.05 * elapsed_time
-                    elif keys[pygame.K_DOWN]:
+                    elif keys[K_DOWN]:
                         if spaceship_speed > -5:
                             spaceship_speed -= 0.05 * elapsed_time
 
@@ -277,26 +289,27 @@ def game():
                     spaceship_speed = 0
 
                 # Rotate the spaceship
-                if keys[pygame.K_LEFT]:
+                if keys[K_LEFT]:
                     spaceship_rotation += 3 * elapsed_time
-                elif keys[pygame.K_RIGHT]:
+                elif keys[K_RIGHT]:
                     spaceship_rotation -= 3 * elapsed_time
                 spaceship_rotation = spaceship_rotation % 359
 
                 # Move the spaceship in the current angle
                 spaceship_location = (
-                    (spaceship_location[0] + math.sin(math.radians(spaceship_rotation)) * ((spaceship_speed*-1) * elapsed_time)),
-                    (spaceship_location[1] + math.cos(math.radians(spaceship_rotation)) * ((spaceship_speed*-1) * elapsed_time)),
+                    (spaceship_location[0] + sin(radians(spaceship_rotation)) * ((spaceship_speed*-1) * elapsed_time)),
+                    (spaceship_location[1] + cos(radians(spaceship_rotation)) * ((spaceship_speed*-1) * elapsed_time)),
                 )
 
+                # Keep the rotation in the range of 360 to avoid possible overflow
                 spaceship_location = (spaceship_location[0] % display.get_width(), spaceship_location[1] % display.get_height())
 
         else:
             # Game over screen --------------------------------------
 
-            title_font  = pygame.font.Font("fonts/fr73pixel.ttf", 50)
-            score_font  = pygame.font.Font("fonts/fr73pixel.ttf", 30)
-            replay_font = pygame.font.Font("fonts/fr73pixel.ttf", 20)
+            title_font  = Font("lib/fonts/fr73pixel.ttf", 50)   # -> pygame.font.Font()
+            score_font  = Font("lib/fonts/fr73pixel.ttf", 30)   # -> pygame.font.Font()
+            replay_font = Font("lib/fonts/fr73pixel.ttf", 20)   # -> pygame.font.Font()
 
             game_over_text = title_font.render("Game Over", True, (255, 0, 0))
             game_over_text_rect = game_over_text.get_rect(center=(display.get_width()/2, display.get_height()/3))
@@ -313,37 +326,39 @@ def game():
 
         # Other Keyboard Events -------------------------------------
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+        for event in get():  # -> pygame.event.get()
+            if event.type == QUIT:  # -> pygame.QUIT
                 process_interrupted = True
 
-            if event.type == pygame.KEYDOWN:
+            if event.type == KEYDOWN:
 
                 # Shoot ---------------------------------------------
 
                 if not spaceship_destroyed and not game_over:
-                    if event.key == pygame.K_SPACE:
+                    if event.key == K_SPACE:
                         bullets.append((spaceship_location, spaceship_rotation))
 
                 # Replay --------------------------------------------
 
-                if hide_game and game_over:
-                    fade_in, fade_out, fade_alpha = True, False, 255
+                if event.key == K_RETURN:
+                    if hide_game and game_over:
+                        fade_in, fade_out, fade_alpha = True, False, 255
 
-                    game_over = hide_game = spaceship_destroyed = False
+                        game_over = hide_game = spaceship_destroyed = False
 
-                    spaceship_location, spaceship_speed, spaceship_rotation = (display.get_width() / 2, display.get_height() / 2), 0, 0
-                    bullets = []
+                        spaceship_location, spaceship_speed, spaceship_rotation = (display.get_width() / 2, display.get_height() / 2), 0, 0
+                        bullets = []
 
-                    meteorites = [Meteorite(display) for _ in range(3)]
+                        meteorites = [Meteorite(display) for _ in range(3)]
 
-                    explosion_frame, wave, score, lives_remaining = 0, 1, 0, 3
+                        explosion_frame, wave, score, lives_remaining = 0, 1, 0, 3
 
         # Effects ---------------------------------------------------
 
-        fade_effect = pygame.Surface(display.get_size(), pygame.SRCALPHA)
-        fade_effect.fill((0, 0, 0, fade_alpha))
-        display.blit(fade_effect, (0, 0))
+        if fade_in or fade_out:
+            fade_effect = Surface(display.get_size(), SRCALPHA)  # -> pygame.Surface()
+            fade_effect.fill((0, 0, 0, fade_alpha))
+            display.blit(fade_effect, (0, 0))
 
         if fade_in:
             if fade_alpha > 0.0:
@@ -360,10 +375,10 @@ def game():
                     fade_in, fade_alpha = True, 255
 
         # Get elapsed time since the last frame
-        elapsed_time = clock.tick(1000) / 10
-        pygame.display.flip()
+        elapsed_time = clock.tick(0) / 10
+        flip()  # -> pygame.display.flip()
 
-    pygame.quit()
+    quit()  # -> pygame.quit()
 
 
 if __name__ == "__main__":
