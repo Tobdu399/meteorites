@@ -357,7 +357,6 @@ def game():
 
         if fade_in or fade_out:
             fade_effect = Surface(display.get_size(), SRCALPHA)  # -> pygame.Surface
-            print(fade_alpha)
             fade_effect.fill((0, 0, 0, fade_alpha))
             display.blit(fade_effect, (0, 0))
 
