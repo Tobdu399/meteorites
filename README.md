@@ -27,7 +27,8 @@ Meteorites arcade game made with `Pygame` library in `Python 3`!
 - Nothing is required to play the game, but for development purposes you will need:
   * `Python 3` You can download Python from [here](https://www.python.org/downloads/)
   * `Pygame` You can find download instructions for the module from [here](https://github.com/pygame/pygame)
-    
+  * `Pathlib` You can find download instructions for the module form [here](https://pypi.org/project/pathlib/)
+
 ---
 
 # License

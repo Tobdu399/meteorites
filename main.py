@@ -1,13 +1,17 @@
 # Import ONLY the items needed for slightly better performance
 from pygame.display   import set_mode, set_caption, set_icon, flip
-from pygame.font      import init, Font
-from pygame           import Surface, SRCALPHA, KEYDOWN, K_UP, K_DOWN, K_LEFT, K_RIGHT, K_RETURN, K_SPACE, quit, QUIT
+from pygame.font      import init as font_init, Font
+from pygame           import Surface, SRCALPHA, KEYDOWN, K_UP, K_DOWN, K_LEFT, K_RIGHT, K_RETURN, K_SPACE, quit, QUIT, AUDIO_ALLOW_FREQUENCY_CHANGE
 from pygame.draw      import polygon, circle
 from pygame.transform import rotate, scale
 from pygame.time      import Clock
 from pygame.image     import load
 from pygame.key       import get_pressed
 from pygame.event     import get
+from pygame.mixer     import init as mixer_init, Sound, fadeout, Channel
+
+from pathlib import Path
+from pickle import load as load_pickle, dump as dump_pickle
 
 from math import sqrt, sin, cos, radians
 from random import randint, uniform
@@ -16,9 +20,9 @@ from random import randint, uniform
 class Meteorite:
     def __init__(self, surface: Surface, size=140):
         self.surface            = surface
-        self.points             = []
-        self.points_location    = []    # 'self.points' contains the points' positions on the surface, but...
-        self.meteorite_rotation = uniform(-1, 1)          # ...not their actual location on the screen
+        self.points             = []               # 'self.points' contains the points' positions on the surface, but...
+        self.points_location    = []               # ...not their actual location on the screen
+        self.meteorite_rotation = uniform(-1, 1)
         self.rotation_speed     = uniform(-1, 1)
         self.direction          = randint(0, 360)
         self.meteorite_size     = self.avg_size = size
@@ -79,7 +83,7 @@ class Meteorite:
         elif self.y < -self.meteorite_size:
             self.y = display_dimensions[1] + (self.meteorite_size / 2)
 
-        # 'self.points' contains the points' positions on the surface, but not their actual location on the screen'
+        # 'self.points' contains the points' positions on the surface, but not their actual location on the screen
         # Updating the list containing the actual coordinates here
         self.points_location = []
         for point in self.points:
@@ -94,14 +98,13 @@ class Meteorite:
             return True
 
 
+def save_high_score(high_score):
+    savefile = open("meteorites.save", "wb")
+    dump_pickle(high_score, savefile)
+    savefile.close()
+
+
 def game():
-    init()
-
-    display             = set_mode((800, 800))     # -> pygame.display.set_mode()
-    clock               = Clock()                  # -> pygame.time.Clock()
-    process_interrupted, game_over = False, False
-    elapsed_time        = 0
-
     # Effects -------------------------------------------------------
 
     # Fade the game in on start
@@ -109,6 +112,47 @@ def game():
 
     # Stop displaying the game after the game has ended and the fade has faded out
     hide_game = False
+
+    # Sound Effects--------------------------------------------------
+
+    mixer_init(frequency=44100, size=32, channels=4, buffer=512, allowedchanges=AUDIO_ALLOW_FREQUENCY_CHANGE)
+    # ^ pygame.mixer.init()
+
+    shoot_sfx               = Sound("lib/sfx/shoot.wav")                # -> pygame.mixer.Sound()
+    shoot_sfx.set_volume(0.1)
+
+    explosion_sfx           = Sound("lib/sfx/explosion.mp3")            # -> pygame.mixer.Sound()
+    explosion_sfx.set_volume(0.2)
+
+    meteorite_explosion_sfx = Sound("lib/sfx/meteorite_explosion.wav")  # -> pygame.mixer.Sound()
+    meteorite_explosion_sfx.set_volume(0.05)
+
+    game_over_sfx           = Sound("lib/sfx/gameover.mp3")             # -> pygame.mixer.Sound()
+    game_over_sfx.set_volume(0.05)
+
+    shoot_sfx_channel, explosion_sfx_channel,\
+        meteorite_explosion_sfx_channel, game_over_sfx_channel = 0, 1, 2, 3
+
+    # Display -------------------------------------------------------
+
+    font_init()   # -> pygame.font.init()
+
+    display = set_mode((800, 800))  # -> pygame.display.set_mode()
+    clock = Clock()                 # -> pygame.time.Clock()
+    process_interrupted, game_over = False, False
+    elapsed_time = 0
+
+    # Text ----------------------------------------------------------
+
+    title_font = Font("lib/fonts/fr73pixel.ttf", 50)   # -> pygame.font.Font()
+    score_font = Font("lib/fonts/fr73pixel.ttf", 30)   # -> pygame.font.Font()
+    replay_font = Font("lib/fonts/fr73pixel.ttf", 20)  # -> pygame.font.Font()
+
+    game_over_text = title_font.render("Game Over", True, (255, 0, 0))
+    game_over_text_rect = game_over_text.get_rect(center=(display.get_width() / 2, display.get_height() / 3))
+
+    replay_text      = replay_font.render("Press ENTER to play again", True, (255, 255, 0))
+    replay_text_rect = replay_text.get_rect(center=(display.get_width() / 2, display.get_height() / 2))
 
     # Images --------------------------------------------------------
 
@@ -130,6 +174,11 @@ def game():
         load("lib/images/heart.png").convert_alpha(), (40, 40)  # -> pygame.image.load()
     )
 
+    # Trophy image
+    trophy_image = scale(                                           # -> pygame.transform.scale()
+        load("lib/images/trophy.png").convert_alpha(), (17, 22)     # -> pygame.image.load()
+    )
+
     # Game properties -----------------------------------------------
 
     spaceship_location, spaceship_speed, spaceship_rotation = (display.get_width()/2, display.get_height()/2), 0, 0
@@ -139,8 +188,14 @@ def game():
     meteorites = [Meteorite(display) for _ in range(3)]
 
     wave            = 1
-    score           = 0
     lives_remaining = 3
+
+    score, high_score, new_high_score = 0, 0, False
+
+    if Path("meteorites.save").is_file():
+        savefile = open("meteorites.save", "rb")
+        high_score = load_pickle(savefile)
+        savefile.close()
 
     while not process_interrupted:
         set_caption(f"Meteorites!    FPS {int(clock.get_fps())}")   # -> pygame.display.set_caption()
@@ -149,6 +204,7 @@ def game():
         display.blit(background_image, (0, 0))
 
         if not hide_game:
+
             # Meteorites ------------------------------------------------
 
             if len(meteorites) == 0:
@@ -163,6 +219,8 @@ def game():
                     if meteorite.collide(spaceship_location):
                         lives_remaining     -= 1
                         spaceship_destroyed = True
+
+                        Channel(explosion_sfx_channel).play(explosion_sfx)
 
             # Spaceship -------------------------------------------------
 
@@ -196,6 +254,14 @@ def game():
                 else:
                     if not game_over:
                         game_over = True
+                        fadeout(1500)   # -> pygame.mixer.fadeout()
+
+                        # Play the Game Over sound
+                        Channel(game_over_sfx_channel).play(game_over_sfx)
+
+                        # If new high score was made, save it into a file
+                        print(high_score)
+                        save_high_score(high_score)
 
                         # Fade the game out
                         fade_out, fade_alpha = True, 0
@@ -225,6 +291,8 @@ def game():
 
                         for meteorite in range(len(meteorites)):
                             if meteorites[meteorite].collide((bullet_x, bullet_y)):
+                                Channel(meteorite_explosion_sfx_channel).play(meteorite_explosion_sfx)
+
                                 # If a bullet hits a meteorite, remove the bullet
                                 bullets.pop(bullet)
 
@@ -244,6 +312,10 @@ def game():
 
                                 # Remove the destroyed meteorite and increase the score
                                 score += meteorites[meteorite].meteorite_size * wave
+                                if score > high_score:
+                                    new_high_score = True
+                                    high_score = score
+
                                 meteorites.pop(meteorite)
                                 break
 
@@ -257,11 +329,18 @@ def game():
 
             font = Font("lib/fonts/fr73pixel.ttf", 22)
 
-            score_text = font.render(f"score: {score}", True, (255, 255, 255))
+            score_text_color = (255, 255, 0) if new_high_score else (255, 255, 255)
+
+            score_text = font.render(f"score: {score}", True, score_text_color)
+            high_score_text = font.render(f"{high_score}", True, (255, 255, 0))
             wave_text  = font.render(f"wave: {wave}", True, (255, 255, 255))
 
             display.blit(score_text, (10, 0))
             display.blit(wave_text, (10, 25))
+
+            score_text_rect = score_text.get_rect()
+            display.blit(trophy_image, (score_text_rect.x + score_text_rect.width + 50, 10))
+            display.blit(high_score_text, (score_text_rect.x + score_text_rect.width + 75, 0))
 
             # Spaceship Movement-----------------------------------------
 
@@ -293,6 +372,8 @@ def game():
                     spaceship_rotation += 3 * elapsed_time
                 elif keys[K_RIGHT]:
                     spaceship_rotation -= 3 * elapsed_time
+
+                # Keep the rotation in the range of 360 to avoid possible overflow
                 spaceship_rotation = spaceship_rotation % 359
 
                 # Move the spaceship in the current angle
@@ -301,24 +382,17 @@ def game():
                     (spaceship_location[1] + cos(radians(spaceship_rotation)) * ((spaceship_speed*-1) * elapsed_time)),
                 )
 
-                # Keep the rotation in the range of 360 to avoid possible overflow
                 spaceship_location = (spaceship_location[0] % display.get_width(), spaceship_location[1] % display.get_height())
 
         else:
             # Game over screen --------------------------------------
 
-            title_font  = Font("lib/fonts/fr73pixel.ttf", 50)   # -> pygame.font.Font()
-            score_font  = Font("lib/fonts/fr73pixel.ttf", 30)   # -> pygame.font.Font()
-            replay_font = Font("lib/fonts/fr73pixel.ttf", 20)   # -> pygame.font.Font()
+            if new_high_score:
+                score_text = score_font.render(f"new high score! {score}", True, (255, 255, 255))
+            else:
+                score_text = score_font.render(f"score {score}", True, (255, 255, 255))
 
-            game_over_text = title_font.render("Game Over", True, (255, 0, 0))
-            game_over_text_rect = game_over_text.get_rect(center=(display.get_width()/2, display.get_height()/3))
-
-            score_text = score_font.render(f"score {score}", True, (255, 255, 255))
-            score_text_rect = score_text.get_rect(center=(display.get_width()/2, (display.get_height()/3) + 60))
-
-            replay_text = replay_font.render("Press ENTER to play again", True, (255, 255, 0))
-            replay_text_rect = replay_text.get_rect(center=(display.get_width()/2, display.get_height()/2))
+            score_text_rect = score_text.get_rect(center=(display.get_width() / 2, (display.get_height() / 3) + 60))
 
             display.blit(game_over_text, game_over_text_rect)
             display.blit(score_text, score_text_rect)
@@ -330,12 +404,16 @@ def game():
             if event.type == QUIT:  # -> pygame.QUIT
                 process_interrupted = True
 
+                if new_high_score:
+                    save_high_score(high_score)
+
             if event.type == KEYDOWN:
 
                 # Shoot ---------------------------------------------
 
                 if not spaceship_destroyed and not game_over:
                     if event.key == K_SPACE:
+                        Channel(shoot_sfx_channel).play(shoot_sfx)
                         bullets.append((spaceship_location, spaceship_rotation))
 
                 # Replay --------------------------------------------
@@ -352,6 +430,9 @@ def game():
                         meteorites = [Meteorite(display) for _ in range(3)]
 
                         explosion_frame, wave, score, lives_remaining = 0, 1, 0, 3
+
+                        # Fade out the Game Over music
+                        fadeout(1000)   # -> pygame.mixer.fadeout()
 
         # Effects ---------------------------------------------------
 
@@ -379,9 +460,8 @@ def game():
         elif fade_alpha > 255:
             fade_alpha = 255
 
-        # Get elapsed time since the last frame
-        elapsed_time = clock.tick(0) / 10
-        flip()  # -> pygame.display.flip()
+        elapsed_time = clock.tick(0) / 10   # Get elapsed time since the last frame
+        flip()                              # -> pygame.display.flip()
 
     quit()  # -> pygame.quit()
 
